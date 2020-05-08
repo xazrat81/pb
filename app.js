@@ -26,6 +26,7 @@ const sequelize = new Sequelize('farid_pulsar', 'farid_farid', 'qazwsx@3366', {
         timestamps: false
     }
 })
+const Op = Sequelize.Op
 const Department = sequelize.define('departments', {
     id: {
         type: Sequelize.INTEGER,
@@ -46,13 +47,74 @@ const Department = sequelize.define('departments', {
         allowNull: false
     }
 })
-// const mysql = require('mysql')
-// const pool = mysql.createPool({
-//     host: 'mikentosh.ru',
-//     user: 'farid_farid',
-//     password: 'qazwsx@3366',
-//     database : 'farid_pulsar'
-// })
+
+const Staff = sequelize.define('staff', {
+    id: {
+        type: Sequelize.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false
+    },
+    department_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false
+    },
+    name: {
+        type: Sequelize.STRING,
+        allowNull: false
+    },
+    position: {
+        type: Sequelize.STRING
+    },
+    place: {
+        type: Sequelize.STRING
+    },
+    phone_g: {
+        type: Sequelize.STRING
+    },
+    phone_c: {
+        type: Sequelize.STRING
+    },
+    phone_m: {
+        type: Sequelize.STRING
+    },
+    view: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false
+    },
+    status: {
+        type: Sequelize.ENUM('Проверен', 'Не проверен'),
+        allowNull: false
+    },
+    reception: {
+        type: Sequelize.BOOLEAN,
+        allowNull: false
+    },
+    partnership: {
+        type: Sequelize.STRING
+    },
+    photo: {
+        type: Sequelize.TEXT
+    }
+}, { freezeTableName: true })
+
+const Dol = sequelize.define('Dol', {
+    name: {
+        type: Sequelize.STRING,
+        allowNull: false
+    },
+    code: {
+        type: Sequelize.DECIMAL,
+        allowNull: false,
+        primaryKey: true
+    }
+}, { freezeTableName: true })
+
+Staff.belongsTo(Dol, {
+    as: 'staff_dol',
+    foreignKey: 'position',
+    targetKey: 'name'
+})
 
 //REST API
 
@@ -118,17 +180,6 @@ app.get('/api/ucp/download', (req, res) => {
 
 app.get('/api/departments', (req, res) => {
 
-    // pool.query(`SELECT * FROM departments ORDER BY parent_id, priority ASC`, (err, results, fields) => {
-
-    //     if(err) {
-    //         console.error('Error occured during querying database', err)
-    //     }
-    //     console.log(req.headers.origin)
-
-    //     let queryResult = results
-    //     queryResult = sqlToJsonHierarchy(queryResult)
-    //     res.json(queryResult)
-    // })
     Department.findAll({
         raw: true,
         order: [
@@ -145,19 +196,24 @@ app.get('/api/departments', (req, res) => {
 
 app.get('/api/contacts/:id', (req, res) => {
 
-    pool.query(`SELECT staff.id, staff.department_id, staff.name, staff.position, staff.place, staff.phone_g, 
-        staff.phone_c, staff.phone_m, staff.view, Dol.name AS d_name, Dol.code FROM staff 
-        LEFT JOIN Dol ON staff.position = Dol.name 
-        WHERE staff.department_id = ? AND staff.view = 1
-        ORDER BY -Dol.code DESC`, [req.params.id], (err, results, fields) => {
-        
-        if(err) {
-            console.error('Error occured during querying database', err)
-        }
+    const depId = req.params.id
 
-        let queryResult = []
-        queryResult = results
-        res.json(queryResult)
+    Staff.findAll({
+        raw: true,
+        where: {
+            department_id: depId,
+            view: 1
+        },
+        include: [
+            {
+                model: Dol,
+                as: 'staff_dol'
+            }
+        ]
+    }).then(staff => {
+        res.json(staff)
+    }).catch(err => {
+        console.log('Error: ', err)
     })
 })
 
@@ -165,20 +221,27 @@ app.get('/api/search', (req, res) => {
 
     const searchVal = `%${req.query.val}%` 
 
-    pool.query(`SELECT staff.id, staff.department_id, staff.name, staff.position, staff.place, staff.phone_g, 
-        staff.phone_c, staff.phone_m, staff.view, Dol.name AS d_name, Dol.code FROM staff 
-        LEFT JOIN Dol ON staff.position = Dol.name 
-        WHERE CONCAT_WS('', staff.name, staff.phone_c, staff.phone_g, staff.phone_m, staff.place) LIKE ? 
-        AND staff.view = 1
-        ORDER BY -Dol.code DESC`, [searchVal], (err, results, fields) => {
-        
-        if(err) {
-            console.error('Error occured during querying database', err)
-        }
-
-        let queryResult = []
-        queryResult = results
-        res.json(queryResult)
+    Staff.findAll({
+        raw: true,
+        where: {
+            [Op.or]: [
+                { name: { [Op.like]: searchVal } },
+                { phone_c: { [Op.like]: searchVal } },
+                { phone_g: { [Op.like]: searchVal } },
+                { phone_m: { [Op.like]: searchVal } },
+                { place: { [Op.like]: searchVal } },
+            ]
+        },
+        include: [
+            {
+                model: Dol,
+                as: 'staff_dol'
+            }
+        ]
+    }).then(staff => {
+        res.json(staff)
+    }).catch(err => {
+        console.log('Error: ', err)
     })
 })
 
