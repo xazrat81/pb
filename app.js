@@ -80,15 +80,18 @@ const Staff = sequelize.define('staff', {
     },
     view: {
         type: Sequelize.BOOLEAN,
-        allowNull: false
+        allowNull: false,
+        defaultValue: 0
     },
     status: {
         type: Sequelize.ENUM('Проверен', 'Не проверен'),
-        allowNull: false
+        allowNull: false,
+        defaultValue: 'Не проверен'
     },
     reception: {
         type: Sequelize.BOOLEAN,
-        allowNull: false
+        allowNull: false,
+        defaultValue: 0
     },
     partnership: {
         type: Sequelize.STRING
@@ -115,10 +118,15 @@ Staff.belongsTo(Dol, {
     foreignKey: 'position',
     targetKey: 'name'
 })
+Staff.belongsTo(Department, {
+    as: 'department',
+    foreignKey: 'department_id',
+    targetKey: 'id'
+})
 
 //REST API
 
-// Regulations
+// --------------------REGULATIONS----------------------
 
 app.get('/api/regulations', (req, res) => {
     let tree = []
@@ -158,7 +166,7 @@ app.get('/api/regulations/download', (req, res) => {
     res.download(file)
 })
 
-// UCP
+// -----------------UCP----------------------
 
 app.get('/api/ucp', (req, res) => {
     
@@ -176,9 +184,12 @@ app.get('/api/ucp/download', (req, res) => {
     res.download(file)
 })
 
-// Phonebook
+// ------------------PHONEBOOK-----------------------
+// Get all departments. Flat flag disables json hierarchy so all contacts will be in pne resulting array
 
 app.get('/api/departments', (req, res) => {
+
+    const isFlat = req.query.flat
 
     Department.findAll({
         raw: true,
@@ -187,12 +198,34 @@ app.get('/api/departments', (req, res) => {
             [ 'priority', 'ASC' ]
         ]
     }).then(departments => {
-        const tree = sqlToJsonHierarchy(departments)
-        res.json(tree)
+        if(!isFlat) {
+            const tree = sqlToJsonHierarchy(departments)
+            res.json(tree)
+        } else {
+            res.json(departments)
+        }
     }).catch(err => {
         console.log('Error: ', err)
     })
 })
+
+app.get('/api/department/:id', (req, res) => {
+
+    const dep_id = req.params.id
+
+    Department.findAll({
+        raw: true,
+        where: {
+            id: dep_id
+        }
+    }).then(departments => {
+        res.json(departments)
+    }).catch(err => {
+        console.log('Error: ', err)
+    })
+})
+
+// Get contact by department id
 
 app.get('/api/contacts/:id', (req, res) => {
 
@@ -217,25 +250,34 @@ app.get('/api/contacts/:id', (req, res) => {
     })
 })
 
+// Method for contact searching. Admin flag is used for viewing invisible to other users contacts 
+
 app.get('/api/search', (req, res) => {
 
     const searchVal = `%${req.query.val}%` 
+    const isAdmin = req.query.admin
+    const conditions = {
+        [Op.or]: [
+            { name: { [Op.like]: searchVal } },
+            { phone_c: { [Op.like]: searchVal } },
+            { phone_g: { [Op.like]: searchVal } },
+            { phone_m: { [Op.like]: searchVal } },
+            { place: { [Op.like]: searchVal } },
+        ]
+    }
+    if(!isAdmin) conditions.view = 1
 
     Staff.findAll({
         raw: true,
-        where: {
-            [Op.or]: [
-                { name: { [Op.like]: searchVal } },
-                { phone_c: { [Op.like]: searchVal } },
-                { phone_g: { [Op.like]: searchVal } },
-                { phone_m: { [Op.like]: searchVal } },
-                { place: { [Op.like]: searchVal } },
-            ]
-        },
+        where: conditions,
         include: [
             {
                 model: Dol,
                 as: 'staff_dol'
+            },
+            {
+                model: Department,
+                as: 'department'
             }
         ]
     }).then(staff => {
@@ -245,7 +287,51 @@ app.get('/api/search', (req, res) => {
     })
 })
 
+// Update method for admin panel. Updates contact according to data sent by user with admin rights
 
+app.patch('/api/contacts/:id', (req, res) => {
+
+    Staff.update({
+        name: req.body.name,
+        department_id: req.body.department_id,
+        position: req.body.position,
+        place: req.body.place,
+        phone_g: req.body.phone_g,
+        phone_c: req.body.phone_c,
+        phone_m: req.body.phone_m,
+        video_phone: req.body.video_phone,
+        view: req.body.view
+    }, { where: { id: req.body.id } }).then(staff => {
+        res.json({ message: 'Успешно обновлено' })
+    }).catch(err => {
+        res.json({ message: 'Произошла ошибка при обновлении данных', error: err })
+    })
+})
+
+// Create method for admin panel. Creates new contact.
+
+app.post('/api/contacts/create', (req, res) => {
+
+    Staff.create({
+        name: req.body.name,
+        department_id: req.body.department_id,
+        position: req.body.position,
+        place: req.body.place,
+        phone_g: req.body.phone_g,
+        phone_c: req.body.phone_c,
+        phone_m: req.body.phone_m,
+        video_phone: req.body.video_phone,
+        view: req.body.view
+    }).then(staff => {
+        res.json({ message: 'Запись успешно создана', data: staff })
+    }).catch(err => {
+        res.json({ message: 'Произошла ошибка при создании записи в базе данных', error: err })
+    })
+})
+
+// ----------------------------------------------------------
+
+// Utility function to make JSON hierarchy from SQL flat data.
 
 function sqlToJsonHierarchy(array) {
 
@@ -265,14 +351,12 @@ function sqlToJsonHierarchy(array) {
                 children: []
             }
         }
-        
         map[parent].children.push(arrayElement)
     }
-
     return map['-'].children
 }
 
-
+// Server settings
 
 const PORT = 3500
 app.listen(PORT, () => console.log(`Server has been started on port ${PORT}`))
