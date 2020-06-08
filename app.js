@@ -329,6 +329,82 @@ app.post('/api/contacts/create', (req, res) => {
     })
 })
 
+// Delete contacts by id
+
+app.delete('/api/contacts/:id', (req, res) => {
+
+    const contactId = req.params.id
+
+    Staff.destroy({
+        where: {
+            id: contactId
+        }
+    }).then(staff => {
+        res.json({ message: 'Запись успешно удалена' })
+    }).catch(err => {
+        res.json({ message: 'Произошла ошибка при удалении записи из базы данных', error: err })
+    })
+})
+
+app.get('/video', (req, res) => {
+    let tree = []
+
+    let makeTree = (url, parent) => {
+
+        fs.readdirSync(url, { encoding: 'utf-8', withFileTypes: true }).forEach(element => {
+            if(element.isDirectory()) {
+                if(parent === null) {
+                    tree.push(element)
+                } else {
+                    parent.children.push(element)
+                }
+                makeTree(`${url}/${element.name}`, element)
+            }
+        })
+    }
+    makeTree('./assets/video', null)
+    res.json(tree)
+})
+
+app.get('/video/folder/:name', (req, res) => {
+
+    const folderName = req.params.name
+    const files = fs.readdirSync(`./assets/video/${folderName}`, { encoding: 'utf-8', withFileTypes: true })
+
+    res.json(files)
+})
+
+app.get('/video/:path', (req, res) => {
+    const videoPath = path.resolve(`${__dirname}/assets/video/${req.params.path}`)
+    const stat = fs.statSync(videoPath)
+    const fileSize = stat.size
+    const range = req.headers.range
+    if (range) {
+        const parts = range.replace(/bytes=/, "").split("-")
+        const start = parseInt(parts[0], 10)
+        const end = parts[1]
+            ? parseInt(parts[1], 10)
+            : fileSize-1
+        const chunksize = (end-start)+1
+        const file = fs.createReadStream(videoPath, {start, end})
+        const head = {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': 'video/mp4',
+        }
+        res.writeHead(206, head);
+        file.pipe(res);
+    } else {
+        const head = {
+            'Content-Length': fileSize,
+            'Content-Type': 'video/mp4',
+        }
+        res.writeHead(200, head)
+        fs.createReadStream(videoPath).pipe(res)
+    }
+})
+
 // ----------------------------------------------------------
 
 // Utility function to make JSON hierarchy from SQL flat data.
