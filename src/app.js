@@ -7,7 +7,7 @@ const app = express()
 // CORS enabling
 
 const corsOptions = {
-    origin: ['http://localhost', 'http://localhost:8080', 'http://10.0.8.19:8080', 'http://10.0.8.19', '10.0.8.19:8080', '10.0.8.19'],
+    origin: ['http://localhost', 'http://localhost:8080', 'http://portal.pulsar.local', 'http://portal2.pulsar.local'],
     credentials: true
 }
 app.use(cors(corsOptions))
@@ -18,100 +18,10 @@ app.use(express.json())
 app.use(express.static(path.resolve(__dirname)))
 
 // Creating SQL connection
-const Sequelize = require('sequelize') 
-const sequelize = new Sequelize('farid_pulsar', 'farid_farid', 'qazwsx@3366', {
-    host: 'mikentosh.ru',
-    dialect: 'mysql',
-    define: {
-        timestamps: false
-    }
-})
-const Op = Sequelize.Op
-const Department = sequelize.define('departments', {
-    id: {
-        type: Sequelize.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-        allowNull: false
-    },
-    parent_id: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-    },
-    name: {
-        type: Sequelize.STRING,
-        allowNull: false
-    },
-    priority: {
-        type: Sequelize.INTEGER,
-        allowNull: false
-    }
-})
-
-const Staff = sequelize.define('staff', {
-    id: {
-        type: Sequelize.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-        allowNull: false
-    },
-    department_id: {
-        type: Sequelize.INTEGER,
-        allowNull: false
-    },
-    name: {
-        type: Sequelize.STRING,
-        allowNull: false
-    },
-    position: {
-        type: Sequelize.STRING
-    },
-    place: {
-        type: Sequelize.STRING
-    },
-    phone_g: {
-        type: Sequelize.STRING
-    },
-    phone_c: {
-        type: Sequelize.STRING
-    },
-    phone_m: {
-        type: Sequelize.STRING
-    },
-    view: {
-        type: Sequelize.BOOLEAN,
-        allowNull: false,
-        defaultValue: 0
-    },
-    status: {
-        type: Sequelize.ENUM('Проверен', 'Не проверен'),
-        allowNull: false,
-        defaultValue: 'Не проверен'
-    },
-    reception: {
-        type: Sequelize.BOOLEAN,
-        allowNull: false,
-        defaultValue: 0
-    },
-    partnership: {
-        type: Sequelize.STRING
-    },
-    photo: {
-        type: Sequelize.TEXT
-    }
-}, { freezeTableName: true })
-
-const Dol = sequelize.define('Dol', {
-    name: {
-        type: Sequelize.STRING,
-        allowNull: false
-    },
-    code: {
-        type: Sequelize.DECIMAL,
-        allowNull: false,
-        primaryKey: true
-    }
-}, { freezeTableName: true })
+const Op = require('sequelize').Op
+const Department = require('./models/Department.model')
+const Staff = require('./models/Staff.model')
+const Dol = require('./models/Dol.model')
 
 Staff.belongsTo(Dol, {
     as: 'staff_dol',
@@ -132,8 +42,8 @@ app.get('/api/regulations', (req, res) => {
     let tree = []
 
     let makeTree = (url, parent) => {
-        
         fs.readdirSync(url, { encoding: 'utf-8', withFileTypes: true }).forEach(element => {
+
             if(element.isDirectory()) {
                 if(parent === null) {
                     tree.push(element)
@@ -144,14 +54,13 @@ app.get('/api/regulations', (req, res) => {
             }
         })
     }
-    makeTree('./assets/regulations', null)
+    makeTree(path.resolve(__dirname + '/assets/regulations'), null)
     res.json(tree)
-
 })
 
 app.get('/api/regulations/folders/:foldername', (req, res) => {
     
-    const files = fs.readdirSync(`./assets/regulations/${req.params.foldername}`, 'utf-8').map(file => {
+    const files = fs.readdirSync(path.resolve(__dirname + `/assets/regulations/${req.params.foldername}`), 'utf-8').map(file => {
         
         file = path.parse(file)
         file.path = `${req.params.foldername}/${file.base}`
@@ -185,7 +94,7 @@ app.get('/api/ucp/download', (req, res) => {
 })
 
 // ------------------PHONEBOOK-----------------------
-// Get all departments. Flat flag disables json hierarchy so all contacts will be in pne resulting array
+// Get all departments. Flat flag disables json hierarchy so all contacts will be in the resulting array
 
 app.get('/api/departments', (req, res) => {
 
@@ -205,7 +114,28 @@ app.get('/api/departments', (req, res) => {
             res.json(departments)
         }
     }).catch(err => {
-        console.log('Error: ', err)
+        res.send({ message: 'Произошла ошибка при получении списка подразделений', error: err })
+    })
+})
+app.get('/api/departments/search/:department', (req, res) => {
+
+    const searchVal = `%${req.params.department}%`
+
+    Department.findAll({
+        raw: true,
+        order: [
+            [ 'parent_id', 'ASC' ],
+            [ 'priority', 'ASC' ]
+        ],
+        where: {
+            name: {
+                [Op.like]: searchVal
+            }
+        }
+    }).then(departments => {
+        res.json(departments)
+    }).catch(err => {
+        res.send({ message: 'Произошла ошибка при запросе к базе данных', error: err })
     })
 })
 
@@ -284,6 +214,99 @@ app.get('/api/search', (req, res) => {
         res.json(staff)
     }).catch(err => {
         console.log('Error: ', err)
+        res.send({ message: 'Произошла ошибка при поиске', error: err })
+    })
+})
+
+app.get('/api/searchpeople', (req, res) => {
+
+    const searchVal = `%${req.query.val}%`
+
+    Staff.findAll({
+        raw: true,
+        where: {
+            name: {
+                [Op.like]: searchVal
+            }
+        },
+        include: [
+            {
+                model: Dol,
+                as: 'staff_dol'
+            },
+            {
+                model: Department,
+                as: 'department'
+            }
+        ]
+    }).then(staff => {
+        res.json(staff)
+    }).catch(err => {
+        console.log('Error: ', err)
+        res.send({ message: 'Произошла ошибка при поиске', error: err })
+    })
+})
+
+app.get('/api/searchphones', (req, res) => {
+
+    const searchVal = `%${req.query.val}%`
+
+    const conditions = {
+        [Op.or]: [
+            { phone_c: { [Op.like]: searchVal } },
+            { phone_g: { [Op.like]: searchVal } },
+            { phone_m: { [Op.like]: searchVal } },
+            { video_phone: { [Op.like]: searchVal } }
+        ]
+    }
+
+    Staff.findAll({
+        raw: true,
+        where: conditions,
+        include: [
+            {
+                model: Dol,
+                as: 'staff_dol'
+            },
+            {
+                model: Department,
+                as: 'department'
+            }
+        ]
+    }).then(staff => {
+        res.json(staff)
+    }).catch(err => {
+        console.log('Error: ', err)
+        res.send({ message: 'Произошла ошибка при поиске', error: err })
+    })
+})
+
+app.get('/api/searchplaces', (req, res) => {
+
+    const searchVal = `%${req.query.val}%`
+
+    Staff.findAll({
+        raw: true,
+        where: {
+            place: {
+                [Op.like]: searchVal
+            }
+        },
+        include: [
+            {
+                model: Dol,
+                as: 'staff_dol'
+            },
+            {
+                model: Department,
+                as: 'department'
+            }
+        ]
+    }).then(staff => {
+        res.json(staff)
+    }).catch(err => {
+        console.log('Error: ', err)
+        res.send({ message: 'Произошла ошибка при поиске', error: err })
     })
 })
 
@@ -362,14 +385,14 @@ app.get('/video', (req, res) => {
             }
         })
     }
-    makeTree('./assets/video', null)
+    makeTree(path.resolve(__dirname + '/assets/video'), null)
     res.json(tree)
 })
 
 app.get('/video/folder/:name', (req, res) => {
 
     const folderName = req.params.name
-    const files = fs.readdirSync(`./assets/video/${folderName}`, { encoding: 'utf-8', withFileTypes: true })
+    const files = fs.readdirSync(path.resolve(`${__dirname}/assets/video/${folderName}`), { encoding: 'utf-8', withFileTypes: true })
 
     res.json(files)
 })
