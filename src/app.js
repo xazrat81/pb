@@ -2,6 +2,7 @@ const cors = require('cors')
 const express = require('express')
 const path = require('path')
 const fs = require('fs')
+const utility = require('./utility')
 const app = express()
 
 // CORS enabling
@@ -108,7 +109,7 @@ app.get('/api/departments', (req, res) => {
         ]
     }).then(departments => {
         if(!isFlat) {
-            const tree = sqlToJsonHierarchy(departments)
+            const tree = utility.sqlToJsonHierarchy(departments)
             res.json(tree)
         } else {
             res.json(departments)
@@ -160,24 +161,54 @@ app.get('/api/department/:id', (req, res) => {
 app.get('/api/contacts/:id', (req, res) => {
 
     const depId = req.params.id
+    const parent = req.query.parent
 
-    Staff.findAll({
-        raw: true,
-        where: {
-            department_id: depId,
-            view: 1
-        },
-        include: [
-            {
-                model: Dol,
-                as: 'staff_dol'
-            }
-        ]
-    }).then(staff => {
-        res.json(staff)
-    }).catch(err => {
-        console.log('Error: ', err)
-    })
+    if(parent) {
+        Department.findAll({
+            raw: true
+        }).then(departments => {
+            let children = utility.accumulateChildEntries(departments, depId)
+            children = children.map( item => item.id )
+
+            Staff.findAll({
+                raw: true,
+                where: {
+                    department_id: {
+                        [Op.in]: children
+                    },
+                    view: 1
+                },
+                include: [
+                    {
+                        model: Dol,
+                        as: 'staff_dol'
+                    }
+                ]
+            }).then(staff => {
+                console.log(staff)
+                res.json(staff)
+            })
+        })
+    } else {
+        Staff.findAll({
+            raw: true,
+            where: {
+                department_id: depId,
+                view: 1
+            },
+            include: [
+                {
+                    model: Dol,
+                    as: 'staff_dol'
+                }
+            ]
+        }).then(staff => {
+            res.json(staff)
+        }).catch(err => {
+            console.log('Error: ', err)
+        })
+    }
+    
 })
 
 // Method for contact searching. Admin flag is used for viewing invisible to other users contacts 
@@ -430,30 +461,7 @@ app.get('/video/:path', (req, res) => {
 
 // ----------------------------------------------------------
 
-// Utility function to make JSON hierarchy from SQL flat data.
 
-function sqlToJsonHierarchy(array) {
-
-    let map = {};
-
-    for(let i = 0; i < array.length; i++) {
-
-        let arrayElement = array[i]
-        
-        arrayElement.children = []
-        map[arrayElement.id] = arrayElement
-
-        let parent = arrayElement.parent_id || '-'
-
-        if(!map[parent]) {
-            map[parent] = {
-                children: []
-            }
-        }
-        map[parent].children.push(arrayElement)
-    }
-    return map['-'].children
-}
 
 // Server settings
 
