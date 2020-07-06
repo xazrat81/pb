@@ -2,8 +2,10 @@ const cors = require('cors')
 const express = require('express')
 const path = require('path')
 const fs = require('fs')
+const md5 = require('crypto-js/md5')
 const utility = require('./utility')
 const app = express()
+const cookieParser = require('cookie-parser')
 
 // CORS enabling
 
@@ -17,12 +19,14 @@ app.use(cors(corsOptions))
 
 app.use(express.json())
 app.use(express.static(path.resolve(__dirname)))
+app.use(cookieParser())
 
 // Creating SQL connection
 const Op = require('sequelize').Op
 const Department = require('./models/Department.model')
 const Staff = require('./models/Staff.model')
 const Dol = require('./models/Dol.model')
+const User = require('./models/User.model')
 
 Staff.belongsTo(Dol, {
     as: 'staff_dol',
@@ -95,7 +99,42 @@ app.get('/api/ucp/download', (req, res) => {
 })
 
 // ------------------PHONEBOOK-----------------------
+
+// Authorization
+
+app.post('/api/authentication', (req, res) => {
+
+    const login = req.body.login
+    const password = md5(md5(req.body.password).toString()).toString()
+
+    User.findOne({
+        raw: true,
+        where: {
+            [Op.and]: [ {login: login}, {password: password} ]
+        }
+    }).then(user => {
+        if(user) {
+            res.cookie('userid', user.login, { expires: new Date(Date.now() + (60 * 60 * 24)) })
+            res.json({ user: user.login })
+        } else {
+            res.status(401)
+            res.json({ message: 'Введены неправильное имя пользователя и/или пароль' })
+        }
+    }).catch(err => {
+        res.send({ message: 'Произошла ошибка при обращении к базе данных', error: err })
+    })
+})
+
+app.post('/api/logout', (req, res) => {
+
+    const user = req.body.userid
+
+    res.clearCookie('userid')
+    res.json({message: 'Выход произведен успешно'})
+})
+
 // Get all departments. Flat flag disables json hierarchy so all contacts will be in the resulting array
+
 
 app.get('/api/departments', (req, res) => {
 
@@ -139,6 +178,8 @@ app.get('/api/departments/search/:department', (req, res) => {
         res.send({ message: 'Произошла ошибка при запросе к базе данных', error: err })
     })
 })
+
+// Get single department by department_id
 
 app.get('/api/department/:id', (req, res) => {
 
