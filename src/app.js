@@ -10,7 +10,7 @@ const cookieParser = require('cookie-parser')
 // CORS enabling
 
 const corsOptions = {
-    origin: ['http://localhost', 'http://localhost:8080', 'http://portal.pulsar.local', 'http://portal2.pulsar.local'],
+    origin: ['http://localhost:8080', 'http://portal.pulsar.local', 'http://portal', 'http://192.168.1.114'],
     credentials: true
 }
 app.use(cors(corsOptions))
