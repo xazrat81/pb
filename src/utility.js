@@ -46,6 +46,17 @@ class Utility {
             }
         }
     }
+
+    makeBreadcrumbs(departments, parent_id, accumulator) {
+
+        if(parent_id) {
+            const result = departments.find(dep => dep.id === parent_id)
+            if(result) {
+                accumulator.push(result)
+                this.makeBreadcrumbs(departments, result.parent_id, accumulator)
+            } else return
+        } else return
+    }
 }
 
 module.exports = new Utility()

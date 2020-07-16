@@ -197,6 +197,29 @@ app.get('/api/department/:id', (req, res) => {
     })
 })
 
+// Get breadcrumbs for department by department id
+
+app.get('/api/department/breadcrumbs/:parent', (req, res) => {
+
+    const dep_id = req.params.parent
+
+    Department.findAll({
+        raw: true
+    }).then(departments => {
+        let breadcrumbs = []
+        const initial = departments.find(dep => dep.id === Number(dep_id))
+        if(initial) breadcrumbs.push(initial)
+        utility.makeBreadcrumbs(departments, initial.parent_id, breadcrumbs)
+        const result = breadcrumbs.map(bc => {
+            return { text: bc.name, to: { name: 'Contacts', params: { id: bc.id } } }
+        }).reverse()
+        res.json(result)
+    }).catch(err => {
+        console.log(err)
+    })
+
+})
+
 // Get contact by department id
 
 app.get('/api/contacts/:id', (req, res) => {
