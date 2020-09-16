@@ -76,7 +76,7 @@ app.get('/api/regulations/folders/:foldername', (req, res) => {
 
 app.get('/api/regulations/download', (req, res) => {
     
-    const file = path.resolve(`${__dirname}/assets/regulations/${req.query.path}`)
+    const file = path.resolve(`${__dirname}/assets/regulations/${decodeURIComponent(req.query.path)}`)
     res.download(file)
 })
 
@@ -215,7 +215,7 @@ app.get('/api/department/breadcrumbs/:parent', (req, res) => {
         }).reverse()
         res.json(result)
     }).catch(err => {
-        console.log(err)
+        console.log('Error: ', err)
     })
 
 })
@@ -249,7 +249,6 @@ app.get('/api/contacts/:id', (req, res) => {
                     }
                 ]
             }).then(staff => {
-                console.log(staff)
                 res.json(staff)
             })
         })
@@ -279,7 +278,9 @@ app.get('/api/contacts/:id', (req, res) => {
 
 app.get('/api/search', (req, res) => {
 
-    const searchVal = `%${req.query.val}%` 
+    console.log(decodeURIComponent(req.query.val))
+
+    const searchVal = `%${decodeURIComponent(req.query.val)}%` 
     const isAdmin = req.query.admin
     const conditions = {
         [Op.or]: [
